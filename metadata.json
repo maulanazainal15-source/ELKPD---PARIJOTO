@@ -1,0 +1,6 @@
+{
+  "name": "E-LKPD Parijoto",
+  "description": "E-LKPD Interaktif Keanekaragaman Hayati: Eksplorasi Etnosains Parijoto (Medinilla speciosa) untuk SMA/MA Kelas X Fase E berbasis Problem Based Learning",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
