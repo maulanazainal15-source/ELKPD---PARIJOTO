@@ -4,11 +4,13 @@ import android.content.Context
 import androidx.room.Room
 import com.example.data.local.AppDatabase
 import com.example.data.local.dao.AnswerDao
+import com.example.data.local.dao.BibliographyDao
 import com.example.data.local.dao.ConfigDao
 import com.example.data.local.dao.DynamicContentDao
 import com.example.data.local.dao.ImageDao
 import com.example.data.local.dao.ProgressDao
 import com.example.data.local.dao.ResultDao
+import com.example.data.local.dao.StudentSubmissionDao
 import com.example.data.local.dao.UserDao
 
 /**
@@ -48,4 +50,8 @@ object DatabaseModule {
     fun provideConfigDao(db: AppDatabase): ConfigDao = db.configDao()
 
     fun provideDynamicContentDao(db: AppDatabase): DynamicContentDao = db.dynamicContentDao()
+
+    fun provideStudentSubmissionDao(db: AppDatabase): StudentSubmissionDao = db.studentSubmissionDao()
+
+    fun provideBibliographyDao(db: AppDatabase): BibliographyDao = db.bibliographyDao()
 }

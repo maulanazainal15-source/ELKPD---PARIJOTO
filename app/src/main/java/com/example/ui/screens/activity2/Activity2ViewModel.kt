@@ -9,7 +9,11 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.di.RepositoryModule
 import com.example.domain.model.Answer
 import com.example.domain.model.LearningProgress
+import com.example.domain.model.StudentSubmission
+import com.example.domain.model.SubmissionType
+import com.example.domain.model.User
 import com.example.domain.repository.LearningRepository
+import com.example.domain.repository.StudentSubmissionRepository
 import com.example.domain.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,13 +24,15 @@ import kotlinx.coroutines.launch
 
 class Activity2ViewModel(
     private val userRepository: UserRepository,
-    private val learningRepository: LearningRepository
+    private val learningRepository: LearningRepository,
+    private val studentSubmissionRepository: StudentSubmissionRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(Activity2State())
     val uiState: StateFlow<Activity2State> = _uiState.asStateFlow()
 
     private var activeUserId: Int = -1
+    private var activeUser: User? = null
 
     init {
         loadInitialData()
@@ -42,11 +48,12 @@ class Activity2ViewModel(
                     }
                 }
                 .collect { users ->
-                    val activeUser = users.lastOrNull()
-                    if (activeUser != null) {
-                        activeUserId = activeUser.id
-                        loadSavedAnswers(activeUser.id)
-                        loadUserProgress(activeUser.id)
+                    val user = users.lastOrNull()
+                    if (user != null) {
+                        activeUser = user
+                        activeUserId = user.id
+                        loadSavedAnswers(user.id)
+                        loadUserProgress(user.id)
                     } else {
                         activeUserId = 1
                         loadSavedAnswers(1)
@@ -114,13 +121,7 @@ class Activity2ViewModel(
         }
     }
 
-    fun navigateToStep(step: Int) {
-        if (step in 1..5) {
-            _uiState.update { it.copy(currentStep = step) }
-        }
-    }
-
-    fun updateProcedureReadStatus(isRead: Boolean) {
+    fun markProcedureRead(isRead: Boolean) {
         _uiState.update { it.copy(isProcedureRead = isRead, isSaved = false) }
     }
 
@@ -201,6 +202,24 @@ class Activity2ViewModel(
 
             learningRepository.insertOrUpdateProgress(progress)
 
+            // Otomatis kirim data praktikum ke repository submission guru
+            val user = activeUser ?: userRepository.getUserById(targetUserId)
+            val submission = StudentSubmission(
+                id = "SUB_ACT2_${targetUserId}",
+                userId = targetUserId,
+                studentName = user?.nama ?: "Siswa E-LKPD",
+                studentClass = user?.kelas ?: "X E-1",
+                studentNis = user?.nis ?: "NIS-$targetUserId",
+                submissionType = SubmissionType.ACTIVITY_2,
+                title = "Aktivitas 2: Rekonstruksi & Praktikum Indikator Parijoto",
+                summary = "Tabel Observasi & Laporan Praktikum ($percentage% Selesai)",
+                payloadJson = formatActivity2Payload(state),
+                score = percentage.toFloat(),
+                status = if (percentage == 100) "TERKIRIM" else "PROGRESS",
+                submittedAt = System.currentTimeMillis()
+            )
+            studentSubmissionRepository?.submitPayload(submission)
+
             _uiState.update {
                 it.copy(
                     progressPercentage = percentage,
@@ -211,13 +230,42 @@ class Activity2ViewModel(
         }
     }
 
+    fun navigateToStep(step: Int) {
+        val clamped = step.coerceIn(1, 5)
+        _uiState.update { it.copy(currentStep = clamped) }
+    }
+
+    fun updateProcedureReadStatus(isRead: Boolean) {
+        markProcedureRead(isRead)
+    }
+
+    private fun formatActivity2Payload(state: Activity2State): String {
+        val obsListString = state.observations.joinToString(", ") { obs ->
+            """{"larutan": "${escapeJson(obs.sampel)}", "awal": "${escapeJson(obs.warnaAwal)}", "akhir": "${escapeJson(obs.warnaSetelahReaksi)}", "ph": "${escapeJson(obs.phPerkiraan)}"}"""
+        }
+        return """
+            {
+              "sains_asli": "${escapeJson(state.indigenousNote)}",
+              "sains_ilmiah": "${escapeJson(state.scientificExplanation)}",
+              "tabel_pengamatan": [$obsListString],
+              "diskusi": "${escapeJson(state.discussionAnswer)}",
+              "kesimpulan": "${escapeJson(state.conclusionAnswer)}"
+            }
+        """.trimIndent()
+    }
+
+    private fun escapeJson(input: String): String {
+        return input.replace("\"", "\\\"").replace("\n", "\\n")
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as Application
                 Activity2ViewModel(
                     userRepository = RepositoryModule.provideUserRepository(app),
-                    learningRepository = RepositoryModule.provideLearningRepository(app)
+                    learningRepository = RepositoryModule.provideLearningRepository(app),
+                    studentSubmissionRepository = RepositoryModule.provideStudentSubmissionRepository(app)
                 )
             }
         }

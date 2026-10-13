@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material.icons.filled.School
@@ -37,12 +39,18 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import com.example.ui.components.TeacherPinVerificationDialog
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -87,6 +95,19 @@ private fun HomeScreenBody(
     state: HomeState,
     navController: NavController
 ) {
+    var showTeacherPinDialog by remember { mutableStateOf(false) }
+
+    if (showTeacherPinDialog) {
+        TeacherPinVerificationDialog(
+            currentActivePin = state.adminPin,
+            onDismiss = { showTeacherPinDialog = false },
+            onPinSuccess = {
+                showTeacherPinDialog = false
+                navController.navigate(Screen.TeacherDashboard.route)
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -96,7 +117,14 @@ private fun HomeScreenBody(
         // 1. Header Banner Profil & Identitas Muria
         HeaderSection(
             user = state.currentUser,
-            onSwitchRoleClick = { navController.navigate(Screen.Identity.route) }
+            schoolName = state.schoolName,
+            onOpenTeacherPortal = {
+                if (state.currentUser?.role == UserRole.TEACHER) {
+                    navController.navigate(Screen.TeacherDashboard.route)
+                } else {
+                    showTeacherPinDialog = true
+                }
+            }
         )
 
         Column(modifier = Modifier.padding(20.dp)) {
@@ -296,11 +324,11 @@ private fun HomeScreenBody(
             Spacer(modifier = Modifier.height(12.dp))
 
             QuickActionCard(
-                title = "Pengaturan Peran (Siswa / Guru & Dashboard Admin)",
-                icon = Icons.Default.AdminPanelSettings,
+                title = "Daftar Pustaka & Rujukan Etnosains",
+                icon = Icons.Default.MenuBook,
                 modifier = Modifier.fillMaxWidth(),
                 badgeColor = MaterialTheme.colorScheme.primary,
-                onClick = { navController.navigate(Screen.Identity.route) }
+                onClick = { navController.navigate(Screen.Bibliography.route) }
             )
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -311,7 +339,8 @@ private fun HomeScreenBody(
 @Composable
 private fun HeaderSection(
     user: User?,
-    onSwitchRoleClick: () -> Unit = {}
+    schoolName: String,
+    onOpenTeacherPortal: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -359,28 +388,58 @@ private fun HeaderSection(
                     )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.secondary)
-                        .clickable { onSwitchRoleClick() }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.SwapHoriz,
-                            contentDescription = "Ganti Peran",
-                            tint = MaterialTheme.colorScheme.onSecondary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (user?.role == UserRole.TEACHER) "GURU / ADMIN" else (user?.kelas ?: "SISWA"),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = MaterialTheme.colorScheme.onSecondary,
-                                fontWeight = FontWeight.Bold
+                if (user?.role == UserRole.TEACHER) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.secondary)
+                            .clickable { onOpenTeacherPortal() }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.AdminPanelSettings,
+                                contentDescription = "Mode Guru",
+                                tint = MaterialTheme.colorScheme.onSecondary,
+                                modifier = Modifier.size(14.dp)
                             )
-                        )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "GURU / ADMIN",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = MaterialTheme.colorScheme.onSecondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                text = user?.kelas ?: "SISWA",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = onOpenTeacherPortal,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "Akses Guru",
+                                tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }

@@ -385,16 +385,19 @@ fun IdentityScreen(
                                 leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) }
                             )
                         }
-                    } else {
                         // Input Khusus Guru / Administrator
                         if (state.policy.requireAdminPinForLogin) {
                             Spacer(modifier = Modifier.height(12.dp))
-                            ParijotoTextField(
+                            OutlinedTextField(
                                 value = state.adminPinInput,
                                 onValueChange = viewModel::onAdminPinChanged,
-                                label = "PIN Otorisasi Guru / Administrator",
-                                placeholder = "Masukkan PIN Admin (Default: ${state.policy.adminPin})",
-                                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
+                                label = { Text("PIN Otorisasi Guru / Administrator") },
+                                placeholder = { Text("Masukkan PIN Keamanan") },
+                                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                                singleLine = true,
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
@@ -570,8 +573,10 @@ fun IdentityScreen(
                         value = quickLoginPin,
                         onValueChange = { quickLoginPin = it },
                         label = { Text("PIN Guru / Admin") },
-                        placeholder = { Text("Default: ${state.policy.adminPin}") },
+                        placeholder = { Text("Masukkan PIN") },
                         singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.di.RepositoryModule
+import com.example.domain.repository.AdminPolicyRepository
 import com.example.domain.repository.EvaluationRepository
 import com.example.domain.repository.LearningRepository
 import com.example.domain.repository.UserRepository
@@ -21,7 +22,8 @@ import kotlinx.coroutines.launch
 class HomeViewModel(
     private val userRepository: UserRepository,
     private val learningRepository: LearningRepository,
-    private val evaluationRepository: EvaluationRepository
+    private val evaluationRepository: EvaluationRepository,
+    private val adminPolicyRepository: AdminPolicyRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeState())
@@ -29,6 +31,21 @@ class HomeViewModel(
 
     init {
         loadDashboardData()
+        observePolicy()
+    }
+
+    private fun observePolicy() {
+        val repo = adminPolicyRepository ?: return
+        viewModelScope.launch {
+            repo.observePolicy().collect { policy ->
+                _uiState.update {
+                    it.copy(
+                        schoolName = policy.schoolName,
+                        adminPin = policy.adminPin
+                    )
+                }
+            }
+        }
     }
 
     fun loadDashboardData() {
@@ -58,40 +75,26 @@ class HomeViewModel(
     private fun observeUserProgress(userId: Int) {
         viewModelScope.launch {
             combine(
-                learningRepository.getAllProgressByUser(userId),
+                learningRepository.getProgressByUserAndActivity(userId, "ACT_1"),
+                learningRepository.getProgressByUserAndActivity(userId, "ACT_2"),
                 evaluationRepository.getResultByUser(userId)
-            ) { progressList, evalResult ->
-                val act1Prog = progressList
-                    .filter { it.activityId == "ACT_1" || it.activityId == "AKTIVITAS_1" }
-                    .maxOfOrNull { it.percentage } ?: 0
+            ) { p1, p2, evalResult ->
+                val act1 = p1?.percentage ?: 0
+                val act2 = p2?.percentage ?: 0
+                val eval = if (evalResult?.isSubmitted == true) 100 else 0
+                val totalOverall = (act1 + act2 + eval) / 3
+                val isEvalCompleted = evalResult?.isSubmitted ?: false
 
-                val act2Prog = progressList
-                    .filter { it.activityId == "ACT_2" || it.activityId == "AKTIVITAS_2" }
-                    .maxOfOrNull { it.percentage } ?: 0
-
-                val evalProg = if (evalResult != null && evalResult.isSubmitted) 100 else 0
-                val totalOverall = ((act1Prog + act2Prog + evalProg) / 3)
-
-                HomeState(
-                    currentUser = _uiState.value.currentUser,
-                    activity1Progress = act1Prog,
-                    activity2Progress = act2Prog,
-                    evaluationProgress = evalProg,
-                    overallProgress = totalOverall,
-                    isEvaluationCompleted = evalResult?.isSubmitted ?: false,
-                    isLoading = false
-                )
-            }.collect { updatedState ->
                 _uiState.update { current ->
                     current.copy(
-                        activity1Progress = updatedState.activity1Progress,
-                        activity2Progress = updatedState.activity2Progress,
-                        evaluationProgress = updatedState.evaluationProgress,
-                        overallProgress = updatedState.overallProgress,
-                        isEvaluationCompleted = updatedState.isEvaluationCompleted
+                        activity1Progress = act1,
+                        activity2Progress = act2,
+                        evaluationProgress = eval,
+                        overallProgress = totalOverall,
+                        isEvaluationCompleted = isEvalCompleted
                     )
                 }
-            }
+            }.collect { }
         }
     }
 
@@ -102,7 +105,8 @@ class HomeViewModel(
                 HomeViewModel(
                     userRepository = RepositoryModule.provideUserRepository(app),
                     learningRepository = RepositoryModule.provideLearningRepository(app),
-                    evaluationRepository = RepositoryModule.provideEvaluationRepository(app)
+                    evaluationRepository = RepositoryModule.provideEvaluationRepository(app),
+                    adminPolicyRepository = RepositoryModule.provideAdminPolicyRepository(app)
                 )
             }
         }

@@ -58,6 +58,7 @@ import com.example.ui.screens.activity2.Activity2Screen
 import com.example.ui.screens.analytics.AnalyticsDashboardScreen
 import com.example.ui.screens.ar.ArParijotoScreen
 import com.example.ui.screens.auth.IdentityScreen
+import com.example.ui.screens.bibliography.BibliographyScreen
 import com.example.ui.screens.discussion.DiscussionBoardScreen
 import com.example.ui.screens.evaluation.EvaluationEssayScreen
 import com.example.ui.screens.evaluation.EvaluationPgScreen
@@ -132,6 +133,18 @@ fun ParijotoNavGraph(
                 onCompleteAndContinue = {
                     elpkdViewModel.markSectionCompleted("CP_TP")
                     navController.navigate(Screen.Activity1.route)
+                }
+            )
+        }
+
+        // 5b. Daftar Pustaka Screen (Read-Only untuk Siswa)
+        composable(Screen.Bibliography.route) {
+            BibliographyScreen(
+                onBackClick = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Home.route) { saveState = true }
+                        launchSingleTop = true
+                    }
                 }
             )
         }

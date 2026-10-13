@@ -24,6 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -201,7 +203,9 @@ fun TeacherDashboardScreen(
                 AdminDashboardSection.entries.forEach { section ->
                     val icon = when (section) {
                         AdminDashboardSection.OVERVIEW_CLASS -> Icons.Default.Analytics
+                        AdminDashboardSection.STUDENT_SUBMISSIONS -> Icons.Default.Assignment
                         AdminDashboardSection.CMS_CONTENT -> Icons.Default.MenuBook
+                        AdminDashboardSection.BIBLIOGRAPHY_MANAGEMENT -> Icons.Default.Book
                         AdminDashboardSection.ROLE_ACCESS_POLICY -> Icons.Default.Security
                         AdminDashboardSection.MODULE_CURRICULUM -> Icons.Default.Tune
                         AdminDashboardSection.USER_ROLE_MANAGEMENT -> Icons.Default.Group
@@ -273,6 +277,28 @@ fun TeacherDashboardScreen(
                         onSavePolicy = viewModel::saveAdminPolicy,
                         onResetPolicy = viewModel::resetPolicyToDefault,
                         onSwitchRoleClick = onSwitchRoleClick
+                    )
+                }
+
+                AdminDashboardSection.STUDENT_SUBMISSIONS -> {
+                    StudentSubmissionsSection(
+                        state = state,
+                        onFilterSelect = viewModel::onSubmissionFilterSelect,
+                        onSearchQueryChange = viewModel::onSubmissionSearchQueryChange,
+                        onViewDetailClick = viewModel::openSubmissionDetail,
+                        onStatusChangeClick = viewModel::updateSubmissionStatus,
+                        onDeleteClick = viewModel::confirmDeleteSubmission
+                    )
+                }
+
+                AdminDashboardSection.BIBLIOGRAPHY_MANAGEMENT -> {
+                    BibliographyManagementSection(
+                        state = state,
+                        onCategoryFilterSelect = viewModel::onBibliographyCategoryFilterSelect,
+                        onSearchQueryChange = viewModel::onBibliographySearchQueryChange,
+                        onAddClick = viewModel::openAddBibliographyDialog,
+                        onEditClick = viewModel::openEditBibliographyDialog,
+                        onDeleteClick = viewModel::confirmDeleteBibliography
                     )
                 }
 
@@ -365,6 +391,70 @@ fun TeacherDashboardScreen(
             },
             dismissButton = {
                 TextButton(onClick = viewModel::dismissResetDefaultConfirm) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+
+    // Submission Detail Inspector Dialog
+    state.inspectingSubmission?.let { sub ->
+        SubmissionDetailDialog(
+            submission = sub,
+            onDismiss = viewModel::closeSubmissionDetail,
+            onStatusUpdate = { newStatus -> viewModel.updateSubmissionStatus(sub.id, newStatus) }
+        )
+    }
+
+    // Submission Delete Confirmation
+    state.submissionToDelete?.let { sub ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDeleteSubmission,
+            icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Hapus Submisi Jawaban?", fontWeight = FontWeight.Bold) },
+            text = { Text("Submisi dari ${sub.studentName} (${sub.title}) akan dihapus permanen.") },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::executeDeleteSubmission,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Hapus")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissDeleteSubmission) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+
+    // Bibliography Editor Dialog
+    if (state.isBibliographyEditorOpen) {
+        BibliographyEditorDialog(
+            initialItem = state.editingBibliography,
+            onDismiss = viewModel::closeBibliographyDialog,
+            onSave = viewModel::saveBibliographyItem
+        )
+    }
+
+    // Bibliography Delete Confirmation
+    state.bibliographyToDelete?.let { bib ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDeleteBibliography,
+            icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Hapus Referensi Pustaka?", fontWeight = FontWeight.Bold) },
+            text = { Text("Rujukan '${bib.title}' akan dihapus dari daftar pustaka.") },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::executeDeleteBibliography,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Hapus")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissDeleteBibliography) {
                     Text("Batal")
                 }
             }

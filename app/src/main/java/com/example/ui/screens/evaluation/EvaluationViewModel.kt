@@ -9,8 +9,12 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.di.RepositoryModule
 import com.example.domain.model.Answer
 import com.example.domain.model.EvaluationResult
+import com.example.domain.model.StudentSubmission
+import com.example.domain.model.SubmissionType
+import com.example.domain.model.User
 import com.example.domain.repository.EvaluationRepository
 import com.example.domain.repository.LearningRepository
+import com.example.domain.repository.StudentSubmissionRepository
 import com.example.domain.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,17 +22,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class EvaluationViewModel(
     private val userRepository: UserRepository,
     private val evaluationRepository: EvaluationRepository,
-    private val learningRepository: LearningRepository? = null
+    private val learningRepository: LearningRepository? = null,
+    private val studentSubmissionRepository: StudentSubmissionRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EvaluationState())
     val uiState: StateFlow<EvaluationState> = _uiState.asStateFlow()
 
     private var activeUserId: Int = -1
+    private var activeUser: User? = null
 
     init {
         loadData()
@@ -48,11 +55,12 @@ class EvaluationViewModel(
                     }
                 }
                 .collect { users ->
-                    val activeUser = users.lastOrNull()
-                    if (activeUser != null) {
-                        activeUserId = activeUser.id
-                        loadSavedAnswers(activeUser.id, pgList, essayList)
-                        checkExistingResult(activeUser.id, pgList, essayList)
+                    val user = users.lastOrNull()
+                    if (user != null) {
+                        activeUser = user
+                        activeUserId = user.id
+                        loadSavedAnswers(user.id, pgList, essayList)
+                        checkExistingResult(user.id, pgList, essayList)
                     } else {
                         activeUserId = 1
                         loadSavedAnswers(1, pgList, essayList)
@@ -206,6 +214,24 @@ class EvaluationViewModel(
 
             evaluationRepository.insertOrUpdateResult(evalResult)
 
+            // Otomatis kirim nilai & rincian jawaban evaluasi ke Guru
+            val user = activeUser ?: userRepository.getUserById(targetUserId)
+            val submission = StudentSubmission(
+                id = "SUB_EVAL_${targetUserId}",
+                userId = targetUserId,
+                studentName = user?.nama ?: "Siswa E-LKPD",
+                studentClass = user?.kelas ?: "X E-1",
+                studentNis = user?.nis ?: "NIS-$targetUserId",
+                submissionType = SubmissionType.EVALUATION_HOTS,
+                title = "Evaluasi Akhir HOTS Terintegrasi Parijoto",
+                summary = "Skor PG: ${String.format(Locale.US, "%.1f", pgScore)} | ${state.essayAnswers.size} Jawaban Essay",
+                payloadJson = formatEvaluationPayload(state, pgScore),
+                score = pgScore.toFloat(),
+                status = if (pgScore >= 75.0) "LOLOS_KKM" else "TERKIRIM",
+                submittedAt = System.currentTimeMillis()
+            )
+            studentSubmissionRepository?.submitPayload(submission)
+
             _uiState.update {
                 it.copy(
                     calculatedPgScore = pgScore,
@@ -214,6 +240,26 @@ class EvaluationViewModel(
                 )
             }
         }
+    }
+
+    private fun formatEvaluationPayload(state: EvaluationState, pgScore: Double): String {
+        val pgAnswersJson = state.selectedPgAnswers.entries.joinToString(", ") { (qId, ans) ->
+            """{"soalId": $qId, "jawabanPilihan": $ans}"""
+        }
+        val essayAnswersJson = state.essayAnswers.entries.joinToString(", ") { (qId, ans) ->
+            """{"soalId": $qId, "jawabanUraian": "${escapeJson(ans)}"}"""
+        }
+        return """
+            {
+              "skor_pg": $pgScore,
+              "jawaban_pg": [$pgAnswersJson],
+              "jawaban_essay": [$essayAnswersJson]
+            }
+        """.trimIndent()
+    }
+
+    private fun escapeJson(input: String): String {
+        return input.replace("\"", "\\\"").replace("\n", "\\n")
     }
 
     private fun getSamplePgQuestions(): List<PgQuestion> {
@@ -290,7 +336,8 @@ class EvaluationViewModel(
                 EvaluationViewModel(
                     userRepository = RepositoryModule.provideUserRepository(app),
                     evaluationRepository = RepositoryModule.provideEvaluationRepository(app),
-                    learningRepository = RepositoryModule.provideLearningRepository(app)
+                    learningRepository = RepositoryModule.provideLearningRepository(app),
+                    studentSubmissionRepository = RepositoryModule.provideStudentSubmissionRepository(app)
                 )
             }
         }

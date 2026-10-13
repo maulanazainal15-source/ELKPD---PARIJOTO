@@ -8,18 +8,24 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.di.RepositoryModule
 import com.example.domain.model.AdminRoleAccessPolicy
+import com.example.domain.model.BibliographyCategory
+import com.example.domain.model.BibliographyItem
 import com.example.domain.model.ClassAnalyticsSummary
 import com.example.domain.model.ContentCategory
 import com.example.domain.model.DynamicContent
 import com.example.domain.model.StudentLearningStatus
+import com.example.domain.model.StudentSubmission
 import com.example.domain.model.StudentSummary
+import com.example.domain.model.SubmissionType
 import com.example.domain.model.User
 import com.example.domain.model.UserMode
 import com.example.domain.model.UserRole
 import com.example.domain.repository.AdminPolicyRepository
+import com.example.domain.repository.BibliographyRepository
 import com.example.domain.repository.DynamicContentRepository
 import com.example.domain.repository.EvaluationRepository
 import com.example.domain.repository.LearningRepository
+import com.example.domain.repository.StudentSubmissionRepository
 import com.example.domain.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,7 +43,9 @@ class TeacherDashboardViewModel(
     private val learningRepository: LearningRepository,
     private val evaluationRepository: EvaluationRepository,
     private val adminPolicyRepository: AdminPolicyRepository? = null,
-    private val dynamicContentRepository: DynamicContentRepository? = null
+    private val dynamicContentRepository: DynamicContentRepository? = null,
+    private val studentSubmissionRepository: StudentSubmissionRepository? = null,
+    private val bibliographyRepository: BibliographyRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TeacherDashboardState())
@@ -46,6 +54,8 @@ class TeacherDashboardViewModel(
     init {
         loadClassData()
         observeCmsContents()
+        observeSubmissions()
+        observeBibliographies()
     }
 
     fun loadClassData() {
@@ -100,17 +110,19 @@ class TeacherDashboardViewModel(
                     val total = summaries.size
                     val completed = summaries.count { it.status == StudentLearningStatus.COMPLETED }
                     val inProgress = summaries.count { it.status == StudentLearningStatus.IN_PROGRESS }
-                    val remedial = summaries.count { it.status == StudentLearningStatus.NEEDS_REMEDIAL }
+                    val needsRemedial = summaries.count { it.status == StudentLearningStatus.NEEDS_REMEDIAL }
                     val avgScore = if (total > 0) summaries.map { it.hotsScore }.average() else 0.0
-                    val avgProgress = if (total > 0) summaries.map { it.overallPercentage.toDouble() }.average() else 0.0
+                    val highest = summaries.maxOfOrNull { it.hotsScore } ?: 0.0
+                    val lowest = summaries.minOfOrNull { it.hotsScore } ?: 0.0
 
+                    val avgProgress = if (total > 0) summaries.map { it.overallPercentage }.average() else 0.0
                     val summary = ClassAnalyticsSummary(
                         totalStudents = total,
                         averageHotsScore = avgScore,
                         averageProgressPercentage = avgProgress,
                         completedCount = completed,
                         inProgressCount = inProgress,
-                        remedialCount = remedial
+                        remedialCount = needsRemedial
                     )
 
                     _uiState.update {
@@ -122,26 +134,292 @@ class TeacherDashboardViewModel(
                             isLoading = false
                         )
                     }
+
                     applyFilterAndSort()
                 }
         }
     }
 
-    private fun observeCmsContents() {
+    private fun observeSubmissions() {
+        val repo = studentSubmissionRepository ?: return
         viewModelScope.launch {
-            dynamicContentRepository?.getAllContents()
-                ?.catch { e ->
-                    _uiState.update { it.copy(errorMessage = "Gagal memuat konten CMS: ${e.message}") }
+            repo.getAllSubmissions().collect { list ->
+                _uiState.update { state ->
+                    state.copy(
+                        submissions = list,
+                        filteredSubmissions = applySubmissionsFilter(list, state.submissionSearchQuery, state.submissionFilterType)
+                    )
                 }
-                ?.collect { contents ->
-                    _uiState.update {
-                        it.copy(cmsContents = contents)
-                    }
-                    applyCmsFilter()
-                }
+            }
         }
     }
 
+    private fun observeBibliographies() {
+        val repo = bibliographyRepository ?: return
+        viewModelScope.launch {
+            repo.getAllBibliographies().collect { list ->
+                _uiState.update { state ->
+                    state.copy(
+                        bibliographies = list,
+                        filteredBibliographies = applyBibliographyFilter(list, state.bibliographySearchQuery, state.bibliographyCategoryFilter)
+                    )
+                }
+            }
+        }
+    }
+
+    // --- SUBMISSIONS VIEWER ACTIONS ---
+    fun onSubmissionFilterSelect(type: SubmissionType?) {
+        _uiState.update { state ->
+            val newType = if (state.submissionFilterType == type) null else type
+            state.copy(
+                submissionFilterType = newType,
+                filteredSubmissions = applySubmissionsFilter(state.submissions, state.submissionSearchQuery, newType)
+            )
+        }
+    }
+
+    fun onSubmissionSearchQueryChange(query: String) {
+        _uiState.update { state ->
+            state.copy(
+                submissionSearchQuery = query,
+                filteredSubmissions = applySubmissionsFilter(state.submissions, query, state.submissionFilterType)
+            )
+        }
+    }
+
+    fun openSubmissionDetail(submission: StudentSubmission) {
+        _uiState.update { it.copy(inspectingSubmission = submission) }
+    }
+
+    fun closeSubmissionDetail() {
+        _uiState.update { it.copy(inspectingSubmission = null) }
+    }
+
+    fun updateSubmissionStatus(submissionId: String, newStatus: String) {
+        viewModelScope.launch {
+            studentSubmissionRepository?.updateSubmissionStatus(submissionId, newStatus)
+            _uiState.update {
+                it.copy(
+                    successMessage = "Status submisi berhasil diubah menjadi: $newStatus",
+                    inspectingSubmission = it.inspectingSubmission?.copy(status = newStatus)
+                )
+            }
+        }
+    }
+
+    fun confirmDeleteSubmission(submission: StudentSubmission) {
+        _uiState.update { it.copy(submissionToDelete = submission) }
+    }
+
+    fun dismissDeleteSubmission() {
+        _uiState.update { it.copy(submissionToDelete = null) }
+    }
+
+    fun executeDeleteSubmission() {
+        val sub = _uiState.value.submissionToDelete ?: return
+        viewModelScope.launch {
+            studentSubmissionRepository?.deleteSubmission(sub.id)
+            _uiState.update {
+                it.copy(
+                    submissionToDelete = null,
+                    inspectingSubmission = null,
+                    successMessage = "Submisi jawaban siswa berhasil dihapus."
+                )
+            }
+        }
+    }
+
+    private fun applySubmissionsFilter(
+        items: List<StudentSubmission>,
+        query: String,
+        type: SubmissionType?
+    ): List<StudentSubmission> {
+        val q = query.trim().lowercase()
+        return items.filter { sub ->
+            val matchesType = type == null || sub.submissionType == type
+            val matchesQuery = q.isEmpty() ||
+                sub.studentName.lowercase().contains(q) ||
+                sub.studentNis.lowercase().contains(q) ||
+                sub.studentClass.lowercase().contains(q) ||
+                sub.title.lowercase().contains(q)
+            matchesType && matchesQuery
+        }
+    }
+
+    // --- BIBLIOGRAPHY CRUD ACTIONS ---
+    fun onBibliographyCategoryFilterSelect(category: BibliographyCategory?) {
+        _uiState.update { state ->
+            val newCat = if (state.bibliographyCategoryFilter == category) null else category
+            state.copy(
+                bibliographyCategoryFilter = newCat,
+                filteredBibliographies = applyBibliographyFilter(state.bibliographies, state.bibliographySearchQuery, newCat)
+            )
+        }
+    }
+
+    fun onBibliographySearchQueryChange(query: String) {
+        _uiState.update { state ->
+            state.copy(
+                bibliographySearchQuery = query,
+                filteredBibliographies = applyBibliographyFilter(state.bibliographies, query, state.bibliographyCategoryFilter)
+            )
+        }
+    }
+
+    fun openAddBibliographyDialog() {
+        _uiState.update {
+            it.copy(
+                isBibliographyEditorOpen = true,
+                editingBibliography = null
+            )
+        }
+    }
+
+    fun openEditBibliographyDialog(item: BibliographyItem) {
+        _uiState.update {
+            it.copy(
+                isBibliographyEditorOpen = true,
+                editingBibliography = item
+            )
+        }
+    }
+
+    fun closeBibliographyDialog() {
+        _uiState.update {
+            it.copy(
+                isBibliographyEditorOpen = false,
+                editingBibliography = null
+            )
+        }
+    }
+
+    fun saveBibliographyItem(
+        title: String,
+        authors: String,
+        year: String,
+        source: String,
+        category: BibliographyCategory,
+        doiOrUrl: String,
+        description: String
+    ) {
+        if (title.isBlank() || authors.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Judul dan Penulis referensi wajib diisi!") }
+            return
+        }
+
+        viewModelScope.launch {
+            val editing = _uiState.value.editingBibliography
+            val item = editing?.copy(
+                title = title.trim(),
+                authors = authors.trim(),
+                year = year.trim().ifBlank { "2024" },
+                source = source.trim(),
+                category = category,
+                doiOrUrl = doiOrUrl.trim(),
+                description = description.trim(),
+                updatedAt = System.currentTimeMillis()
+            ) ?: BibliographyItem(
+                id = "ref_${UUID.randomUUID().toString().take(8)}",
+                title = title.trim(),
+                authors = authors.trim(),
+                year = year.trim().ifBlank { "2024" },
+                source = source.trim(),
+                category = category,
+                doiOrUrl = doiOrUrl.trim(),
+                description = description.trim(),
+                orderIndex = (_uiState.value.bibliographies.maxOfOrNull { it.orderIndex } ?: 0) + 1,
+                updatedAt = System.currentTimeMillis()
+            )
+
+            bibliographyRepository?.saveBibliography(item)
+            _uiState.update {
+                it.copy(
+                    isBibliographyEditorOpen = false,
+                    editingBibliography = null,
+                    successMessage = "Referensi pustaka berhasil disimpan dan tersinkron ke siswa."
+                )
+            }
+        }
+    }
+
+    fun confirmDeleteBibliography(item: BibliographyItem) {
+        _uiState.update { it.copy(bibliographyToDelete = item) }
+    }
+
+    fun dismissDeleteBibliography() {
+        _uiState.update { it.copy(bibliographyToDelete = null) }
+    }
+
+    fun executeDeleteBibliography() {
+        val item = _uiState.value.bibliographyToDelete ?: return
+        viewModelScope.launch {
+            bibliographyRepository?.deleteBibliography(item.id)
+            _uiState.update {
+                it.copy(
+                    bibliographyToDelete = null,
+                    successMessage = "Referensi pustaka berhasil dihapus."
+                )
+            }
+        }
+    }
+
+    private fun applyBibliographyFilter(
+        items: List<BibliographyItem>,
+        query: String,
+        category: BibliographyCategory?
+    ): List<BibliographyItem> {
+        val q = query.trim().lowercase()
+        return items.filter { item ->
+            val matchesCategory = category == null || item.category == category
+            val matchesQuery = q.isEmpty() ||
+                item.title.lowercase().contains(q) ||
+                item.authors.lowercase().contains(q) ||
+                item.source.lowercase().contains(q) ||
+                item.year.contains(q)
+            matchesCategory && matchesQuery
+        }
+    }
+
+    // --- SECURITY PIN MANAGEMENT ACTIONS ---
+    fun openChangePinDialog() {
+        _uiState.update { it.copy(isChangePinDialogOpen = true) }
+    }
+
+    fun closeChangePinDialog() {
+        _uiState.update { it.copy(isChangePinDialogOpen = false) }
+    }
+
+    fun executeChangeSecurityPin(oldPin: String, newPin: String, confirmPin: String): Boolean {
+        val currentPin = _uiState.value.policy.adminPin
+        if (oldPin.trim() != currentPin.trim()) {
+            _uiState.update { it.copy(errorMessage = "PIN Lama tidak sesuai!") }
+            return false
+        }
+        if (newPin.trim().length < 4) {
+            _uiState.update { it.copy(errorMessage = "PIN Baru minimal 4 karakter digit!") }
+            return false
+        }
+        if (newPin.trim() != confirmPin.trim()) {
+            _uiState.update { it.copy(errorMessage = "Konfirmasi PIN Baru tidak cocok!") }
+            return false
+        }
+
+        viewModelScope.launch {
+            val updatedPolicy = _uiState.value.policy.copy(adminPin = newPin.trim())
+            adminPolicyRepository?.savePolicy(updatedPolicy)
+            _uiState.update {
+                it.copy(
+                    policy = updatedPolicy,
+                    isChangePinDialogOpen = false,
+                    successMessage = "PIN Keamanan Guru berhasil diperbarui."
+                )
+            }
+        }
+        return true
+    }
+
+    // --- NAVIGATION SECTIONS ---
     fun onSectionSelect(section: AdminDashboardSection) {
         _uiState.update { it.copy(selectedSection = section) }
     }
@@ -151,13 +429,15 @@ class TeacherDashboardViewModel(
         applyFilterAndSort()
     }
 
-    fun onFilterSelect(filter: StudentLearningStatus?) {
-        _uiState.update { it.copy(selectedFilter = filter) }
+    fun onFilterSelect(status: StudentLearningStatus?) {
+        _uiState.update {
+            it.copy(selectedFilter = if (it.selectedFilter == status) null else status)
+        }
         applyFilterAndSort()
     }
 
-    fun onSortSelect(sort: StudentSortOption) {
-        _uiState.update { it.copy(sortOption = sort) }
+    fun onSortSelect(option: StudentSortOption) {
+        _uiState.update { it.copy(sortOption = option) }
         applyFilterAndSort()
     }
 
@@ -165,104 +445,171 @@ class TeacherDashboardViewModel(
         _uiState.update { it.copy(selectedStudentDetail = student) }
     }
 
-    fun updatePolicyDraft(newPolicy: AdminRoleAccessPolicy) {
-        _uiState.update { it.copy(policy = newPolicy) }
+    fun saveSchoolName(name: String) {
+        if (name.isBlank()) return
+        viewModelScope.launch {
+            val updated = _uiState.value.policy.copy(schoolName = name.trim())
+            adminPolicyRepository?.savePolicy(updated)
+            _uiState.update { it.copy(policy = updated, successMessage = "Identitas sekolah berhasil diperbarui dan tersinkron.") }
+        }
     }
 
-    fun saveAdminPolicy() {
-        val repo = adminPolicyRepository ?: return
+    fun saveAcademicYear(year: String) {
+        if (year.isBlank()) return
         viewModelScope.launch {
-            try {
-                repo.savePolicy(_uiState.value.policy)
-                _uiState.update {
-                    it.copy(successMessage = "Ketentuan akses peran berhasil disimpan!")
-                }
-                loadClassData()
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(errorMessage = "Gagal menyimpan ketentuan: ${e.message}")
-                }
+            val updated = _uiState.value.policy.copy(academicYear = year.trim())
+            adminPolicyRepository?.savePolicy(updated)
+            _uiState.update { it.copy(policy = updated, successMessage = "Tahun ajaran berhasil disimpan.") }
+        }
+    }
+
+    fun updateMinimumPassingGrade(kkm: Int) {
+        val coerced = kkm.coerceIn(50, 95)
+        viewModelScope.launch {
+            val updated = _uiState.value.policy.copy(minimumPassingGradeKkm = coerced)
+            adminPolicyRepository?.savePolicy(updated)
+            _uiState.update { it.copy(policy = updated, successMessage = "Standar KKM diperbarui menjadi $coerced") }
+            loadClassData()
+        }
+    }
+
+    fun toggleRequireAdminPin(require: Boolean) {
+        viewModelScope.launch {
+            val updated = _uiState.value.policy.copy(requireAdminPinForLogin = require)
+            adminPolicyRepository?.savePolicy(updated)
+            _uiState.update { it.copy(policy = updated) }
+        }
+    }
+
+    fun toggleEvaluationOpen(isOpen: Boolean) {
+        viewModelScope.launch {
+            val updated = _uiState.value.policy.copy(isEvaluationOpen = isOpen)
+            adminPolicyRepository?.savePolicy(updated)
+            _uiState.update {
+                it.copy(
+                    policy = updated,
+                    successMessage = if (isOpen) "Evaluasi HOTS dibuka untuk siswa" else "Evaluasi HOTS dikunci"
+                )
             }
         }
     }
 
-    fun resetPolicyToDefault() {
-        val repo = adminPolicyRepository ?: return
+    fun toggleAiTutorEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            val updated = _uiState.value.policy.copy(isAiTutorEnabled = enabled)
+            adminPolicyRepository?.savePolicy(updated)
+            _uiState.update {
+                it.copy(
+                    policy = updated,
+                    successMessage = if (enabled) "AI Tutor diaktifkan untuk siswa" else "AI Tutor dinonaktifkan"
+                )
+            }
+        }
+    }
+
+    fun updateAllowedClasses(classes: String) {
+        viewModelScope.launch {
+            val updated = _uiState.value.policy.copy(allowedStudentClasses = classes)
+            adminPolicyRepository?.savePolicy(updated)
+            _uiState.update { it.copy(policy = updated, successMessage = "Daftar kelas diizinkan diperbarui") }
+        }
+    }
+
+    fun toggleIndividuMode(allow: Boolean) {
+        viewModelScope.launch {
+            val updated = _uiState.value.policy.copy(allowIndividuMode = allow)
+            adminPolicyRepository?.savePolicy(updated)
+            _uiState.update { it.copy(policy = updated) }
+        }
+    }
+
+    fun toggleKelompokMode(allow: Boolean) {
+        viewModelScope.launch {
+            val updated = _uiState.value.policy.copy(allowKelompokMode = allow)
+            adminPolicyRepository?.savePolicy(updated)
+            _uiState.update { it.copy(policy = updated) }
+        }
+    }
+
+    fun updateAnnouncement(announcement: String) {
+        viewModelScope.launch {
+            val updated = _uiState.value.policy.copy(announcementBanner = announcement)
+            adminPolicyRepository?.savePolicy(updated)
+            _uiState.update { it.copy(policy = updated, successMessage = "Pengumuman berhasil disinkronkan ke siswa") }
+        }
+    }
+
+    fun registerNewUserByAdmin(
+        nama: String,
+        nis: String,
+        kelas: String,
+        kelompok: String,
+        mode: UserMode,
+        role: UserRole
+    ) {
+        viewModelScope.launch {
+            if (nama.isBlank() || nis.isBlank()) {
+                _uiState.update { it.copy(errorMessage = "Nama dan NIS/NIP tidak boleh kosong") }
+                return@launch
+            }
+
+            try {
+                userRepository.insertOrUpdateStudent(
+                    User(
+                        nama = nama.trim(),
+                        nis = nis.trim(),
+                        kelas = kelas.trim(),
+                        kelompok = kelompok.trim(),
+                        mode = mode,
+                        role = role
+                    )
+                )
+                _uiState.update { it.copy(successMessage = "Akun ${role.name} $nama berhasil didaftarkan") }
+                loadClassData()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "Gagal mendaftarkan akun: ${e.message}") }
+            }
+        }
+    }
+
+    fun deleteUserByAdmin(user: User) {
         viewModelScope.launch {
             try {
-                val defaultPolicy = repo.resetToDefaultPolicy()
-                _uiState.update {
-                    it.copy(
-                        policy = defaultPolicy,
-                        successMessage = "Pengaturan dikembalikan ke standar awal."
+                userRepository.deleteUser(user.id)
+                _uiState.update { it.copy(successMessage = "Pengguna ${user.nama} berhasil dihapus") }
+                loadClassData()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "Gagal menghapus pengguna: ${e.message}") }
+            }
+        }
+    }
+
+    // --- CMS CRUD METHODS ---
+    private fun observeCmsContents() {
+        val repo = dynamicContentRepository ?: return
+        viewModelScope.launch {
+            repo.getAllContents().collect { contents ->
+                _uiState.update { state ->
+                    state.copy(
+                        cmsContents = contents,
+                        cmsFilteredContents = contents
                     )
                 }
-                loadClassData()
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(errorMessage = "Gagal mereset pengaturan: ${e.message}")
-                }
+                filterCmsContents()
             }
         }
     }
-
-    fun toggleUserRole(user: User) {
-        val newRole = if (user.role == UserRole.TEACHER) UserRole.STUDENT else UserRole.TEACHER
-        viewModelScope.launch {
-            val updated = user.copy(
-                role = newRole,
-                kelas = if (newRole == UserRole.TEACHER) "GURU / ADMIN" else "X-1"
-            )
-            userRepository.insertOrUpdateStudent(updated)
-            _uiState.update {
-                it.copy(
-                    successMessage = "Peran ${user.nama} berhasil diubah menjadi ${if (newRole == UserRole.TEACHER) "Guru / Administrator" else "Siswa"}."
-                )
-            }
-        }
-    }
-
-    fun createSampleOrNewUser(nama: String, nis: String, kelas: String, role: UserRole) {
-        if (nama.isBlank() || nis.isBlank()) return
-        viewModelScope.launch {
-            val newUser = User(
-                nama = nama.trim(),
-                nis = nis.trim(),
-                kelas = if (role == UserRole.TEACHER) "GURU / ADMIN" else kelas.trim().ifBlank { "X-1" },
-                kelompok = _uiState.value.policy.schoolName,
-                mode = UserMode.INDIVIDU,
-                role = role
-            )
-            userRepository.registerOrLoginUser(newUser)
-            _uiState.update {
-                it.copy(
-                    successMessage = "Akun ${newUser.nama} (${if (role == UserRole.TEACHER) "Guru/Admin" else "Siswa"}) berhasil ditambahkan."
-                )
-            }
-        }
-    }
-
-    fun deleteRegisteredUser(userId: Int) {
-        viewModelScope.launch {
-            userRepository.deleteUser(userId)
-            _uiState.update {
-                it.copy(successMessage = "Akun pengguna berhasil dihapus.")
-            }
-        }
-    }
-
-    // ==========================================
-    // CMS DYNAMIC CONTENT CRUD METHODS
-    // ==========================================
 
     fun onCmsCategorySelect(category: ContentCategory?) {
-        _uiState.update { it.copy(cmsSelectedCategory = category) }
-        applyCmsFilter()
+        _uiState.update {
+            it.copy(cmsSelectedCategory = if (it.cmsSelectedCategory == category) null else category)
+        }
+        filterCmsContents()
     }
 
     fun onCmsSearchQueryChange(query: String) {
         _uiState.update { it.copy(cmsSearchQuery = query) }
-        applyCmsFilter()
+        filterCmsContents()
     }
 
     fun openAddContentDialog(prefilledCategory: ContentCategory? = null) {
@@ -280,12 +627,12 @@ class TeacherDashboardViewModel(
             it.copy(
                 isContentEditorOpen = true,
                 editingContent = content,
-                prefilledCategoryForNew = null
+                prefilledCategoryForNew = content.category
             )
         }
     }
 
-    fun closeContentEditor() {
+    fun closeContentEditorDialog() {
         _uiState.update {
             it.copy(
                 isContentEditorOpen = false,
@@ -298,57 +645,83 @@ class TeacherDashboardViewModel(
     fun saveContent(
         id: String?,
         title: String,
-        contentText: String,
+        content: String,
         category: ContentCategory,
         subCategory: String,
         orderIndex: Int,
         author: String
     ) {
-        val trimmedTitle = title.trim()
-        val trimmedContent = contentText.trim()
-        val trimmedAuthor = author.trim().ifBlank { "Guru / Administrator" }
-        val trimmedSubCat = subCategory.trim().ifBlank { "UMUM" }
-
-        if (trimmedTitle.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "Judul konten wajib diisi dan tidak boleh hanya spasi!") }
-            return
-        }
-        if (trimmedContent.isEmpty()) {
-            _uiState.update { it.copy(errorMessage = "Teks isi materi/panduan tidak boleh kosong!") }
+        if (title.isBlank() || content.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Judul dan Isi konten materi tidak boleh kosong!") }
             return
         }
 
         viewModelScope.launch {
-            val targetId = id ?: UUID.randomUUID().toString()
-            val contentToSave = DynamicContent(
-                id = targetId,
-                category = category,
-                subCategory = trimmedSubCat,
-                title = trimmedTitle,
-                content = trimmedContent,
-                orderIndex = orderIndex,
-                author = trimmedAuthor,
-                lastUpdated = System.currentTimeMillis(),
-                isDefault = false
-            )
+            val repo = dynamicContentRepository ?: return@launch
+            val now = System.currentTimeMillis()
 
-            val result = dynamicContentRepository?.saveContent(contentToSave)
-            if (result?.isSuccess == true) {
-                _uiState.update {
-                    it.copy(
-                        isContentEditorOpen = false,
-                        editingContent = null,
-                        successMessage = "Konten '$trimmedTitle' berhasil disimpan!"
-                    )
-                }
+            val contentToSave = if (id != null) {
+                val existing = repo.getContentById(id)
+                existing?.copy(
+                    category = category,
+                    subCategory = subCategory.ifBlank { category.badge },
+                    title = title.trim(),
+                    content = content.trim(),
+                    orderIndex = orderIndex,
+                    author = author.ifBlank { "Guru / Administrator" },
+                    lastUpdated = now
+                ) ?: DynamicContent(
+                    id = id,
+                    category = category,
+                    subCategory = subCategory.ifBlank { category.badge },
+                    title = title.trim(),
+                    content = content.trim(),
+                    orderIndex = orderIndex,
+                    author = author.ifBlank { "Guru / Administrator" },
+                    lastUpdated = now
+                )
             } else {
-                _uiState.update {
-                    it.copy(
-                        errorMessage = "Gagal menyimpan konten: ${result?.exceptionOrNull()?.message ?: "Terjadi kesalahan"}"
-                    )
-                }
+                DynamicContent(
+                    id = "cms_${UUID.randomUUID().toString().take(8)}",
+                    category = category,
+                    subCategory = subCategory.ifBlank { category.badge },
+                    title = title.trim(),
+                    content = content.trim(),
+                    orderIndex = orderIndex,
+                    author = author.ifBlank { "Guru / Administrator" },
+                    lastUpdated = now
+                )
+            }
+
+            repo.saveContent(contentToSave)
+            _uiState.update {
+                it.copy(
+                    isContentEditorOpen = false,
+                    editingContent = null,
+                    prefilledCategoryForNew = null,
+                    successMessage = "Konten materi '${contentToSave.title}' berhasil disimpan dan tersinkron!"
+                )
             }
         }
+    }
+
+    fun saveContent(
+        category: ContentCategory,
+        subCategory: String,
+        title: String,
+        contentBody: String,
+        orderIndex: Int
+    ) {
+        val editing = _uiState.value.editingContent
+        saveContent(
+            id = editing?.id,
+            title = title,
+            content = contentBody,
+            category = category,
+            subCategory = subCategory,
+            orderIndex = orderIndex,
+            author = editing?.author ?: "Guru / Administrator"
+        )
     }
 
     fun confirmDeleteContent(content: DynamicContent) {
@@ -359,64 +732,115 @@ class TeacherDashboardViewModel(
         _uiState.update { it.copy(contentToDelete = null) }
     }
 
-    fun deleteContent(id: String) {
+    fun executeDeleteContent() {
+        val content = _uiState.value.contentToDelete ?: return
         viewModelScope.launch {
-            val result = dynamicContentRepository?.deleteContent(id)
-            if (result?.isSuccess == true) {
-                _uiState.update {
-                    it.copy(
-                        contentToDelete = null,
-                        successMessage = "Konten berhasil dihapus!"
-                    )
-                }
-            } else {
-                _uiState.update {
-                    it.copy(
-                        errorMessage = "Gagal menghapus konten: ${result?.exceptionOrNull()?.message}"
-                    )
-                }
+            val repo = dynamicContentRepository ?: return@launch
+            repo.deleteContent(content.id)
+            _uiState.update {
+                it.copy(
+                    contentToDelete = null,
+                    successMessage = "Konten '${content.title}' berhasil dihapus."
+                )
             }
         }
     }
 
-    fun openResetDefaultConfirm() {
+    fun openResetDefaultConfirmDialog() {
         _uiState.update { it.copy(isResetDefaultConfirmOpen = true) }
     }
 
-    fun dismissResetDefaultConfirm() {
+    fun dismissResetDefaultConfirmDialog() {
         _uiState.update { it.copy(isResetDefaultConfirmOpen = false) }
     }
 
-    fun resetContentsToDefault() {
+    fun executeResetToDefaultContents() {
         viewModelScope.launch {
-            val result = dynamicContentRepository?.resetToDefault()
-            if (result?.isSuccess == true) {
-                _uiState.update {
-                    it.copy(
-                        isResetDefaultConfirmOpen = false,
-                        successMessage = "Seluruh materi & panduan berhasil direset ke standar kurikulum!"
-                    )
-                }
-            } else {
-                _uiState.update {
-                    it.copy(
-                        errorMessage = "Gagal mereset konten: ${result?.exceptionOrNull()?.message}"
-                    )
-                }
+            val repo = dynamicContentRepository ?: return@launch
+            repo.resetToDefault()
+            _uiState.update {
+                it.copy(
+                    isResetDefaultConfirmOpen = false,
+                    successMessage = "Seluruh konten dikembalikan ke kurikulum standar etnosains Parijoto."
+                )
             }
         }
     }
 
-    private fun applyCmsFilter() {
+    // Helper aliases for UI calls
+    fun updatePolicyDraft(updated: AdminRoleAccessPolicy) {
+        _uiState.update { it.copy(policy = updated) }
+    }
+
+    fun saveAdminPolicy() {
+        viewModelScope.launch {
+            adminPolicyRepository?.savePolicy(_uiState.value.policy)
+            _uiState.update { it.copy(successMessage = "Pengaturan kebijakan & PIN berhasil disimpan.") }
+        }
+    }
+
+    fun resetPolicyToDefault() {
+        viewModelScope.launch {
+            val def = AdminRoleAccessPolicy()
+            adminPolicyRepository?.savePolicy(def)
+            _uiState.update { it.copy(policy = def, successMessage = "Kebijakan dikembalikan ke default.") }
+        }
+    }
+
+    fun toggleUserRole(user: User) {
+        viewModelScope.launch {
+            val newRole = if (user.role == UserRole.TEACHER) UserRole.STUDENT else UserRole.TEACHER
+            val updated = user.copy(role = newRole)
+            userRepository.insertOrUpdateStudent(updated)
+            loadClassData()
+        }
+    }
+
+    fun deleteRegisteredUser(userId: Int) {
+        deleteUserById(userId)
+    }
+
+    fun deleteRegisteredUser(user: User) {
+        deleteUserById(user.id)
+    }
+
+    fun deleteUserById(userId: Int) {
+        viewModelScope.launch {
+            try {
+                userRepository.deleteUser(userId)
+                _uiState.update { it.copy(successMessage = "Pengguna berhasil dihapus") }
+                loadClassData()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "Gagal menghapus pengguna: ${e.message}") }
+            }
+        }
+    }
+
+    fun createSampleOrNewUser(nama: String, nis: String, kelas: String, role: UserRole) {
+        registerNewUserByAdmin(nama, nis, kelas, "", UserMode.INDIVIDU, role)
+    }
+
+    fun openResetDefaultConfirm() = openResetDefaultConfirmDialog()
+    fun dismissResetDefaultConfirm() = dismissResetDefaultConfirmDialog()
+    fun resetContentsToDefault() = executeResetToDefaultContents()
+    fun closeContentEditor() = closeContentEditorDialog()
+    fun deleteContent(id: String) {
+        viewModelScope.launch {
+            dynamicContentRepository?.deleteContent(id)
+            _uiState.update { it.copy(contentToDelete = null, successMessage = "Konten berhasil dihapus.") }
+        }
+    }
+
+    private fun filterCmsContents() {
         val query = _uiState.value.cmsSearchQuery.trim().lowercase()
-        val selectedCategory = _uiState.value.cmsSelectedCategory
+        val cat = _uiState.value.cmsSelectedCategory
 
         val filtered = _uiState.value.cmsContents.filter { content ->
-            val matchesCategory = selectedCategory == null || content.category == selectedCategory
+            val matchesCategory = cat == null || content.category == cat
             val matchesQuery = query.isEmpty() ||
                 content.title.lowercase().contains(query) ||
                 content.content.lowercase().contains(query) ||
-                content.getSubCategoryLabel().lowercase().contains(query) ||
+                content.subCategory.lowercase().contains(query) ||
                 content.author.lowercase().contains(query)
             matchesCategory && matchesQuery
         }
@@ -457,7 +881,9 @@ class TeacherDashboardViewModel(
                     learningRepository = RepositoryModule.provideLearningRepository(app),
                     evaluationRepository = RepositoryModule.provideEvaluationRepository(app),
                     adminPolicyRepository = RepositoryModule.provideAdminPolicyRepository(app),
-                    dynamicContentRepository = RepositoryModule.provideDynamicContentRepository(app)
+                    dynamicContentRepository = RepositoryModule.provideDynamicContentRepository(app),
+                    studentSubmissionRepository = RepositoryModule.provideStudentSubmissionRepository(app),
+                    bibliographyRepository = RepositoryModule.provideBibliographyRepository(app)
                 )
             }
         }

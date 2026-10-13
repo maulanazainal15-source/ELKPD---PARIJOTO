@@ -263,7 +263,7 @@ fun ProfileScreen(
 
             FilledTonalButton(
                 onClick = {
-                    if (state.user?.role == UserRole.TEACHER || !state.policy.requireAdminPinForLogin) {
+                    if (state.user?.role == UserRole.TEACHER) {
                         navController.navigate(Screen.TeacherDashboard.route)
                     } else {
                         viewModel.showAdminPinDialog(true)
@@ -272,21 +272,24 @@ fun ProfileScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(imageVector = Icons.Default.AdminPanelSettings, contentDescription = null)
+                Icon(
+                    imageVector = if (state.user?.role == UserRole.TEACHER) Icons.Default.AdminPanelSettings else Icons.Default.Lock,
+                    contentDescription = null
+                )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Buka Dashboard Admin / Guru")
+                Text(if (state.user?.role == UserRole.TEACHER) "Buka Dashboard Admin / Guru" else "Akses Guru / Administrator (Verifikasi PIN)")
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
             FilledTonalButton(
-                onClick = { navController.navigate(Screen.Identity.route) },
+                onClick = { navController.navigate(Screen.Bibliography.route) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(imageVector = Icons.Default.SwapHoriz, contentDescription = null)
+                Icon(imageVector = Icons.Default.Book, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Pengaturan Masuk Peran (Siswa / Guru Admin)")
+                Text("Buka Daftar Pustaka & Rujukan")
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -349,51 +352,14 @@ fun ProfileScreen(
             )
         }
 
-        // Dialog Verifikasi PIN Admin sesuai Ketentuan Dashboard Admin
+        // Dialog Verifikasi PIN Admin berbasis TeacherPinVerificationDialog
         if (state.isAdminPinDialogVisible) {
-            var pinInput by remember { mutableStateOf("") }
-            AlertDialog(
-                onDismissRequest = { viewModel.showAdminPinDialog(false) },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                },
-                title = { Text("Otorisasi Dashboard Admin") },
-                text = {
-                    Column {
-                        Text(
-                            text = "Sesuai ketentuan Dashboard Admin, masukkan PIN Keamanan Guru/Administrator untuk membuka pusat kendali.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = pinInput,
-                            onValueChange = { pinInput = it },
-                            label = { Text("PIN Guru / Administrator") },
-                            placeholder = { Text("PIN Aktif: ${state.policy.adminPin}") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            if (viewModel.verifyAdminPin(pinInput)) {
-                                navController.navigate(Screen.TeacherDashboard.route)
-                            }
-                        }
-                    ) {
-                        Text("Masuk Dashboard Admin")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.showAdminPinDialog(false) }) {
-                        Text("Batal")
-                    }
+            com.example.ui.components.TeacherPinVerificationDialog(
+                currentActivePin = state.policy.adminPin,
+                onDismiss = { viewModel.showAdminPinDialog(false) },
+                onPinSuccess = {
+                    viewModel.showAdminPinDialog(false)
+                    navController.navigate(Screen.TeacherDashboard.route)
                 }
             )
         }

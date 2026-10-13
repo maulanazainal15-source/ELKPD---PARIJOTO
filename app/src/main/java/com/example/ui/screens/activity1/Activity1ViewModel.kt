@@ -9,7 +9,11 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.di.RepositoryModule
 import com.example.domain.model.Answer
 import com.example.domain.model.LearningProgress
+import com.example.domain.model.StudentSubmission
+import com.example.domain.model.SubmissionType
+import com.example.domain.model.User
 import com.example.domain.repository.LearningRepository
+import com.example.domain.repository.StudentSubmissionRepository
 import com.example.domain.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,13 +24,15 @@ import kotlinx.coroutines.launch
 
 class Activity1ViewModel(
     private val userRepository: UserRepository,
-    private val learningRepository: LearningRepository
+    private val learningRepository: LearningRepository,
+    private val studentSubmissionRepository: StudentSubmissionRepository? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(Activity1State())
     val uiState: StateFlow<Activity1State> = _uiState.asStateFlow()
 
     private var activeUserId: Int = -1
+    private var activeUser: User? = null
 
     init {
         loadInitialData()
@@ -42,11 +48,12 @@ class Activity1ViewModel(
                     }
                 }
                 .collect { users ->
-                    val activeUser = users.lastOrNull()
-                    if (activeUser != null) {
-                        activeUserId = activeUser.id
-                        loadSavedAnswers(activeUser.id)
-                        loadUserProgress(activeUser.id)
+                    val user = users.lastOrNull()
+                    if (user != null) {
+                        activeUser = user
+                        activeUserId = user.id
+                        loadSavedAnswers(user.id)
+                        loadUserProgress(user.id)
                     } else {
                         activeUserId = 1
                         loadSavedAnswers(1)
@@ -155,6 +162,24 @@ class Activity1ViewModel(
 
             learningRepository.insertOrUpdateProgress(progress)
 
+            // Otomatis kirim metadata & jawaban ke repository submission guru
+            val user = activeUser ?: userRepository.getUserById(targetUserId)
+            val submission = StudentSubmission(
+                id = "SUB_ACT1_${targetUserId}",
+                userId = targetUserId,
+                studentName = user?.nama ?: "Siswa E-LKPD",
+                studentClass = user?.kelas ?: "X E-1",
+                studentNis = user?.nis ?: "NIS-$targetUserId",
+                submissionType = SubmissionType.ACTIVITY_1,
+                title = "Aktivitas 1: Eksplorasi Etnosains Parijoto Muria",
+                summary = "$filledCount/5 Tahap PBL Selesai ($percentage%)",
+                payloadJson = formatActivity1Payload(state),
+                score = percentage.toFloat(),
+                status = if (percentage == 100) "TERKIRIM" else "PROGRESS",
+                submittedAt = System.currentTimeMillis()
+            )
+            studentSubmissionRepository?.submitPayload(submission)
+
             _uiState.update {
                 it.copy(
                     progressPercentage = percentage,
@@ -165,13 +190,30 @@ class Activity1ViewModel(
         }
     }
 
+    private fun formatActivity1Payload(state: Activity1State): String {
+        return """
+            {
+              "fase1_orientasi": "${escapeJson(state.orientasiAnswer)}",
+              "fase2_organisasi": "${escapeJson(state.organisasiAnswer)}",
+              "fase3_penyelidikan": "${escapeJson(state.penyelidikanAnswer)}",
+              "fase4_karya": "${escapeJson(state.karyaAnswer)}",
+              "fase5_evaluasi": "${escapeJson(state.evaluasiAnswer)}"
+            }
+        """.trimIndent()
+    }
+
+    private fun escapeJson(input: String): String {
+        return input.replace("\"", "\\\"").replace("\n", "\\n")
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as Application
                 Activity1ViewModel(
                     userRepository = RepositoryModule.provideUserRepository(app),
-                    learningRepository = RepositoryModule.provideLearningRepository(app)
+                    learningRepository = RepositoryModule.provideLearningRepository(app),
+                    studentSubmissionRepository = RepositoryModule.provideStudentSubmissionRepository(app)
                 )
             }
         }

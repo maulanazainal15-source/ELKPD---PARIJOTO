@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -17,6 +18,7 @@ sealed class Screen(val route: String, val title: String? = null, val icon: Imag
     object Home : Screen("home_screen", "Beranda", Icons.Default.Home)
     object Guide : Screen("guide_screen", "Panduan", Icons.Default.Book)
     object CpTp : Screen("cptp_screen", "CP & TP", Icons.Default.Assignment)
+    object Bibliography : Screen("bibliography_screen", "Pustaka", Icons.Default.Bookmark)
     object AiTutor : Screen("ai_tutor_screen", "AI Tutor", Icons.Default.AutoAwesome)
     object Profile : Screen("profile_screen", "Profil", Icons.Default.Person)
 
@@ -46,6 +48,6 @@ val bottomNavItems = listOf(
     Screen.Home,
     Screen.Guide,
     Screen.CpTp,
-    Screen.AiTutor,
+    Screen.Bibliography,
     Screen.Profile
 )

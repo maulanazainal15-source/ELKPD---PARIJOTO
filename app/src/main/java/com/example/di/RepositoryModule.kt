@@ -2,14 +2,18 @@ package com.example.di
 
 import android.content.Context
 import com.example.data.repository.AdminPolicyRepositoryImpl
+import com.example.data.repository.BibliographyRepositoryImpl
 import com.example.data.repository.DynamicContentRepositoryImpl
 import com.example.data.repository.EvaluationRepositoryImpl
 import com.example.data.repository.LearningRepositoryImpl
+import com.example.data.repository.StudentSubmissionRepositoryImpl
 import com.example.data.repository.UserRepositoryImpl
 import com.example.domain.repository.AdminPolicyRepository
+import com.example.domain.repository.BibliographyRepository
 import com.example.domain.repository.DynamicContentRepository
 import com.example.domain.repository.EvaluationRepository
 import com.example.domain.repository.LearningRepository
+import com.example.domain.repository.StudentSubmissionRepository
 import com.example.domain.repository.UserRepository
 
 /**
@@ -32,6 +36,12 @@ object RepositoryModule {
 
     fun bindDynamicContentRepository(dynamicContentRepositoryImpl: DynamicContentRepositoryImpl): DynamicContentRepository =
         dynamicContentRepositoryImpl
+
+    fun bindStudentSubmissionRepository(impl: StudentSubmissionRepositoryImpl): StudentSubmissionRepository =
+        impl
+
+    fun bindBibliographyRepository(impl: BibliographyRepositoryImpl): BibliographyRepository =
+        impl
 
     fun provideUserRepository(context: Context): UserRepository {
         val db = DatabaseModule.provideAppDatabase(context)
@@ -67,6 +77,20 @@ object RepositoryModule {
         val db = DatabaseModule.provideAppDatabase(context)
         return bindDynamicContentRepository(
             DynamicContentRepositoryImpl(DatabaseModule.provideDynamicContentDao(db))
+        )
+    }
+
+    fun provideStudentSubmissionRepository(context: Context): StudentSubmissionRepository {
+        val db = DatabaseModule.provideAppDatabase(context)
+        return bindStudentSubmissionRepository(
+            StudentSubmissionRepositoryImpl(DatabaseModule.provideStudentSubmissionDao(db))
+        )
+    }
+
+    fun provideBibliographyRepository(context: Context): BibliographyRepository {
+        val db = DatabaseModule.provideAppDatabase(context)
+        return bindBibliographyRepository(
+            BibliographyRepositoryImpl(DatabaseModule.provideBibliographyDao(db))
         )
     }
 }

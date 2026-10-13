@@ -1,12 +1,25 @@
 package com.example.ui.screens.survey
 
+import android.app.Application
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.di.RepositoryModule
+import com.example.domain.model.StudentSubmission
+import com.example.domain.model.SubmissionType
 import com.example.domain.model.SurveyStatement
 import com.example.domain.model.UsabilitySurveyResult
+import com.example.domain.repository.StudentSubmissionRepository
+import com.example.domain.repository.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import java.util.Locale
 
 data class SurveyUiState(
     val statements: List<SurveyStatement> = SurveyViewModel.defaultSusStatements(),
@@ -15,7 +28,10 @@ data class SurveyUiState(
     val isSubmitted: Boolean = false
 )
 
-class SurveyViewModel : ViewModel() {
+class SurveyViewModel(
+    private val userRepository: UserRepository? = null,
+    private val studentSubmissionRepository: StudentSubmissionRepository? = null
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SurveyUiState())
     val uiState: StateFlow<SurveyUiState> = _uiState.asStateFlow()
@@ -73,6 +89,50 @@ class SurveyViewModel : ViewModel() {
                 isSubmitted = true
             )
         }
+
+        // Otomatis kirim respon survei ke Dashboard Guru
+        viewModelScope.launch {
+            val users = userRepository?.getAllStudents()?.firstOrNull()
+            val activeUser = users?.lastOrNull() ?: userRepository?.getUserById(1)
+            val submission = StudentSubmission(
+                id = "SUB_SURVEY_${activeUser?.id ?: 1}",
+                userId = activeUser?.id ?: 1,
+                studentName = activeUser?.nama ?: "Siswa E-LKPD",
+                studentClass = activeUser?.kelas ?: "X E-1",
+                studentNis = activeUser?.nis ?: "-",
+                submissionType = SubmissionType.USABILITY_SURVEY,
+                title = "Kuesioner Usabilitas SUS & Respon Pengguna",
+                summary = "Skor SUS: ${String.format(Locale.US, "%.1f", finalSusScore)} ($category)",
+                payloadJson = formatSurveyPayload(currentStatements, finalSusScore, category, result.qualitativeFeedback),
+                score = finalSusScore.toFloat(),
+                status = "TERKIRIM",
+                submittedAt = System.currentTimeMillis()
+            )
+            studentSubmissionRepository?.submitPayload(submission)
+        }
+    }
+
+    private fun formatSurveyPayload(
+        statements: List<SurveyStatement>,
+        finalScore: Double,
+        gradeCategory: String,
+        feedback: String
+    ): String {
+        val statementsJson = statements.joinToString(", ") { s ->
+            """{"id": ${s.id}, "pernyataan": "${escapeJson(s.statementText)}", "skor": ${s.selectedScore}}"""
+        }
+        return """
+            {
+              "skor_sus": $finalScore,
+              "kategori_grade": "${escapeJson(gradeCategory)}",
+              "komentar_kualitatif": "${escapeJson(feedback)}",
+              "butir_pernyataan": [$statementsJson]
+            }
+        """.trimIndent()
+    }
+
+    private fun escapeJson(input: String): String {
+        return input.replace("\"", "\\\"").replace("\n", "\\n")
     }
 
     fun resetSurvey() {
@@ -80,6 +140,16 @@ class SurveyViewModel : ViewModel() {
     }
 
     companion object {
+        val Factory: ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val app = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as Application
+                SurveyViewModel(
+                    userRepository = RepositoryModule.provideUserRepository(app),
+                    studentSubmissionRepository = RepositoryModule.provideStudentSubmissionRepository(app)
+                )
+            }
+        }
+
         fun defaultSusStatements(): List<SurveyStatement> = listOf(
             SurveyStatement(1, "Saya merasa senang menggunakan aplikasi E-LKPD Etnosains Parijoto ini untuk belajar kimia dan biologi.", true),
             SurveyStatement(2, "Saya merasa tampilan dan alur navigasi aplikasi ini terlalu rumit untuk dipahami.", false),

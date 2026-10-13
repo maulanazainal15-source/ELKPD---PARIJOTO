@@ -66,6 +66,7 @@ class ProfileViewModelTest {
             override suspend fun getUserById(userId: Int): User = mockUser
             override suspend fun getUserByNis(nis: String): User = mockUser
             override fun getAllStudents(): Flow<List<User>> = flowOf(listOf(mockUser))
+            override fun getAllUsers(): Flow<List<User>> = flowOf(listOf(mockUser))
             override suspend fun deleteUser(userId: Int) {}
         }
 

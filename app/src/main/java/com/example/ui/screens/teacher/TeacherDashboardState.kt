@@ -1,11 +1,15 @@
 package com.example.ui.screens.teacher
 
 import com.example.domain.model.AdminRoleAccessPolicy
+import com.example.domain.model.BibliographyCategory
+import com.example.domain.model.BibliographyItem
 import com.example.domain.model.ClassAnalyticsSummary
 import com.example.domain.model.ContentCategory
 import com.example.domain.model.DynamicContent
 import com.example.domain.model.StudentLearningStatus
+import com.example.domain.model.StudentSubmission
 import com.example.domain.model.StudentSummary
+import com.example.domain.model.SubmissionType
 import com.example.domain.model.User
 
 enum class StudentSortOption {
@@ -16,8 +20,10 @@ enum class StudentSortOption {
 
 enum class AdminDashboardSection(val title: String) {
     OVERVIEW_CLASS("Analitik & Siswa"),
+    STUDENT_SUBMISSIONS("Jawaban Siswa"),
     CMS_CONTENT("Kelola Konten / CMS"),
-    ROLE_ACCESS_POLICY("Pengaturan Peran"),
+    BIBLIOGRAPHY_MANAGEMENT("Daftar Pustaka"),
+    ROLE_ACCESS_POLICY("Pengaturan & PIN"),
     MODULE_CURRICULUM("Konten & KKM"),
     USER_ROLE_MANAGEMENT("Kelola Akun")
 }
@@ -34,6 +40,26 @@ data class TeacherDashboardState(
     val selectedStudentDetail: StudentSummary? = null,
     val policy: AdminRoleAccessPolicy = AdminRoleAccessPolicy(),
     
+    // Submissions Viewer States
+    val submissions: List<StudentSubmission> = emptyList(),
+    val filteredSubmissions: List<StudentSubmission> = emptyList(),
+    val submissionFilterType: SubmissionType? = null,
+    val submissionSearchQuery: String = "",
+    val inspectingSubmission: StudentSubmission? = null,
+    val submissionToDelete: StudentSubmission? = null,
+
+    // Bibliography CRUD States
+    val bibliographies: List<BibliographyItem> = emptyList(),
+    val filteredBibliographies: List<BibliographyItem> = emptyList(),
+    val bibliographyCategoryFilter: BibliographyCategory? = null,
+    val bibliographySearchQuery: String = "",
+    val isBibliographyEditorOpen: Boolean = false,
+    val editingBibliography: BibliographyItem? = null,
+    val bibliographyToDelete: BibliographyItem? = null,
+
+    // Security PIN Management States
+    val isChangePinDialogOpen: Boolean = false,
+
     // CMS Dynamic Content States
     val cmsContents: List<DynamicContent> = emptyList(),
     val cmsFilteredContents: List<DynamicContent> = emptyList(),

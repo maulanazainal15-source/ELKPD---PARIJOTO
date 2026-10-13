@@ -41,7 +41,7 @@ import com.example.util.AccessibilityExtensions.accessibleHeading
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedbackSurveyScreen(
-    viewModel: SurveyViewModel = viewModel(),
+    viewModel: SurveyViewModel = viewModel(factory = SurveyViewModel.Factory),
     onBackClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
