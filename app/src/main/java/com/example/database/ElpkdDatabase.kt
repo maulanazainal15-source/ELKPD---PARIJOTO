@@ -99,7 +99,7 @@ interface ElpkdDao {
         ResultEntity::class,
         TeacherConfigEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class ElpkdDatabase : RoomDatabase() {
@@ -116,7 +116,8 @@ abstract class ElpkdDatabase : RoomDatabase() {
                     ElpkdDatabase::class.java,
                     "elkpd_parijoto_muria.db"
                 )
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration(true)
+                    .fallbackToDestructiveMigrationOnDowngrade(true)
                     .build()
                 INSTANCE = instance
                 instance

@@ -19,7 +19,9 @@ data class StudentSubmissionEntity(
     val payloadJson: String,
     val score: Float? = null,
     val status: String = "TERKIRIM",
-    val submittedAt: Long = System.currentTimeMillis()
+    val submittedAt: Long = System.currentTimeMillis(),
+    val schoolName: String = "SMA Negeri 1 Gunung Muria",
+    val deviceInfo: String = ""
 ) {
     fun toDomain(): StudentSubmission {
         val type = try {
@@ -39,7 +41,9 @@ data class StudentSubmissionEntity(
             payloadJson = payloadJson,
             score = score,
             status = status,
-            submittedAt = submittedAt
+            submittedAt = submittedAt,
+            schoolName = schoolName,
+            deviceInfo = deviceInfo
         )
     }
 
@@ -57,7 +61,9 @@ data class StudentSubmissionEntity(
                 payloadJson = domain.payloadJson,
                 score = domain.score,
                 status = domain.status,
-                submittedAt = domain.submittedAt
+                submittedAt = domain.submittedAt,
+                schoolName = domain.schoolName,
+                deviceInfo = domain.deviceInfo
             )
         }
     }

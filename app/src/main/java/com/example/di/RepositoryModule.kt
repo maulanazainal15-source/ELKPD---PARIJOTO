@@ -68,29 +68,34 @@ object RepositoryModule {
 
     fun provideAdminPolicyRepository(context: Context): AdminPolicyRepository {
         val db = DatabaseModule.provideAppDatabase(context)
+        val firestore = FirebaseModule.provideFirestore(context)
         return bindAdminPolicyRepository(
-            AdminPolicyRepositoryImpl(DatabaseModule.provideConfigDao(db))
+            AdminPolicyRepositoryImpl(DatabaseModule.provideConfigDao(db), firestore)
         )
     }
 
     fun provideDynamicContentRepository(context: Context): DynamicContentRepository {
         val db = DatabaseModule.provideAppDatabase(context)
+        val firestore = FirebaseModule.provideFirestore(context)
         return bindDynamicContentRepository(
-            DynamicContentRepositoryImpl(DatabaseModule.provideDynamicContentDao(db))
+            DynamicContentRepositoryImpl(DatabaseModule.provideDynamicContentDao(db), firestore)
         )
     }
 
     fun provideStudentSubmissionRepository(context: Context): StudentSubmissionRepository {
         val db = DatabaseModule.provideAppDatabase(context)
+        val firestore = FirebaseModule.provideFirestore(context)
+        val auth = FirebaseModule.provideFirebaseAuth(context)
         return bindStudentSubmissionRepository(
-            StudentSubmissionRepositoryImpl(DatabaseModule.provideStudentSubmissionDao(db))
+            StudentSubmissionRepositoryImpl(DatabaseModule.provideStudentSubmissionDao(db), firestore, auth)
         )
     }
 
     fun provideBibliographyRepository(context: Context): BibliographyRepository {
         val db = DatabaseModule.provideAppDatabase(context)
+        val firestore = FirebaseModule.provideFirestore(context)
         return bindBibliographyRepository(
-            BibliographyRepositoryImpl(DatabaseModule.provideBibliographyDao(db))
+            BibliographyRepositoryImpl(DatabaseModule.provideBibliographyDao(db), firestore)
         )
     }
 }

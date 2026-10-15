@@ -1,0 +1,169 @@
+{
+  "entities": {
+    "AppPolicyConfig": {
+      "title": "AppPolicyConfig",
+      "description": "Global school configuration, policy, and security PIN hash set by Teacher/Admin",
+      "type": "object",
+      "properties": {
+        "schoolName": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "adminPinHash": { "type": "string" },
+        "minimumPassingGradeKkm": { "type": "integer" },
+        "requireAdminPinForLogin": { "type": "boolean" },
+        "requireApprovedNipPrefix": { "type": "boolean" },
+        "approvedNipPrefix": { "type": "string" },
+        "allowedStudentClasses": { "type": "string" },
+        "isEvaluationOpen": { "type": "boolean" },
+        "isAiTutorEnabled": { "type": "boolean" },
+        "announcementBanner": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["schoolName", "adminPinHash"]
+    },
+    "DynamicContentItem": {
+      "title": "DynamicContentItem",
+      "description": "Learning materials, guides, CP/TP, and PBL activities managed dynamically by Teacher",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string", "enum": ["GUIDE", "CP_TP", "PBL_ACTIVITY"] },
+        "subCategory": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "orderIndex": { "type": "integer" },
+        "author": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" },
+        "isDefault": { "type": "boolean" }
+      },
+      "required": ["id", "category", "subCategory", "title", "content"]
+    },
+    "Bibliography": {
+      "title": "Bibliography",
+      "description": "Scientific literature, journal references, and ethnochemistry curriculum sources",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "authors": { "type": "string" },
+        "year": { "type": "string" },
+        "source": { "type": "string" },
+        "category": { "type": "string", "enum": ["JURNAL", "BUKU", "REGULASI", "ETNOSAINS"] },
+        "doiOrUrl": { "type": "string" },
+        "description": { "type": "string" },
+        "orderIndex": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "authors", "year", "source", "category"]
+    },
+    "StudentSubmissionDoc": {
+      "title": "StudentSubmissionDoc",
+      "description": "Automated student submissions for E-LKPD, Practicum, HOTS, and SUS Surveys",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "studentClass": { "type": "string" },
+        "studentNis": { "type": "string" },
+        "submissionType": { "type": "string", "enum": ["ACTIVITY_1", "ACTIVITY_2", "EVALUATION_HOTS", "USABILITY_SURVEY"] },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "payloadJson": { "type": "string" },
+        "score": { "type": "number" },
+        "status": { "type": "string" },
+        "submissionTimestamp": { "type": "string", "format": "date-time" },
+        "deviceInfo": { "type": "string" }
+      },
+      "required": ["id", "studentId", "studentName", "submissionType", "title", "payloadJson"]
+    },
+    "QuizDuelDoc": {
+      "title": "QuizDuelDoc",
+      "description": "Realtime multiplayer quiz duel session and synchronized score state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "player1Id": { "type": "string" },
+        "player1Name": { "type": "string" },
+        "player2Id": { "type": "string" },
+        "player2Name": { "type": "string" },
+        "player1Score": { "type": "integer" },
+        "player2Score": { "type": "integer" },
+        "currentQuestionIndex": { "type": "integer" },
+        "status": { "type": "string", "enum": ["WAITING", "IN_PROGRESS", "COMPLETED"] },
+        "winnerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "player1Id", "player1Name", "status"]
+    },
+    "ForumPostDoc": {
+      "title": "ForumPostDoc",
+      "description": "Collaborative ethnochemistry science forum questions, discussions, and student replies",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "likesCount": { "type": "integer" },
+        "commentsCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "authorId", "authorName", "title", "content"]
+    },
+    "UserProfileDoc": {
+      "title": "UserProfileDoc",
+      "description": "Cloud user profile synchronizing authentication identity with student/teacher roles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "nama": { "type": "string" },
+        "nis": { "type": "string" },
+        "kelas": { "type": "string" },
+        "kelompok": { "type": "string" },
+        "role": { "type": "string", "enum": ["STUDENT", "TEACHER", "ADMIN"] },
+        "mode": { "type": "string", "enum": ["INDIVIDU", "KELOMPOK"] },
+        "hotsScore": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "nama", "role"]
+    }
+  },
+  "firestore": {
+    "/app_config/{configId}": {
+      "schema": { "$ref": "#/entities/AppPolicyConfig" },
+      "description": "Global school configuration, policy, and security PIN hash"
+    },
+    "/dynamic_contents/{contentId}": {
+      "schema": { "$ref": "#/entities/DynamicContentItem" },
+      "description": "Dynamic learning contents, guides, and curriculum items"
+    },
+    "/bibliographies/{bibId}": {
+      "schema": { "$ref": "#/entities/Bibliography" },
+      "description": "Scientific bibliography literature items"
+    },
+    "/student_submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/StudentSubmissionDoc" },
+      "description": "Student task and experiment submissions delivered to teacher dashboard"
+    },
+    "/quiz_duels/{duelId}": {
+      "schema": { "$ref": "#/entities/QuizDuelDoc" },
+      "description": "Realtime 1v1 quiz duel multiplayer matchmaking and scores"
+    },
+    "/forum_posts/{postId}": {
+      "schema": { "$ref": "#/entities/ForumPostDoc" },
+      "description": "Online live ethnochemistry discussion forum posts"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfileDoc" },
+      "description": "User profile records mapped to authenticated Google account UID"
+    }
+  }
+}

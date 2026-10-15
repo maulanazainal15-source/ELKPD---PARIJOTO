@@ -18,49 +18,48 @@ class QuizDuelUiTest {
     val composeTestRule = createComposeRule()
 
     @Test
-    fun quizDuelScreen_displaysInitialQuestion_andAdvancesToNextQuestion() {
+    fun quizDuelScreen_displaysLobbyAndLeaderboard() {
         composeTestRule.setContent {
             QuizDuelScreen(onBackClick = {})
         }
 
-        // 1. Verifikasi soal pertama muncul di layar
+        // 1. Verifikasi judul Arena dan tombol Matchmaking
         composeTestRule
-            .onNodeWithText("Soal 1 dari 2")
+            .onNodeWithText("Arena Quiz Duel Etnosains")
             .assertIsDisplayed()
 
         composeTestRule
-            .onNodeWithText("Pelarut apakah yang paling efektif untuk mengekstrak pigmen antosianin Parijoto?")
-            .assertIsDisplayed()
-
-        // 2. Pilih opsi jawaban benar ("Etanol terasamkan")
-        composeTestRule
-            .onNodeWithText("Etanol terasamkan")
-            .performClick()
-
-        // 3. Verifikasi layar berpindah ke Soal ke-2
-        composeTestRule
-            .onNodeWithText("Soal 2 dari 2")
+            .onNodeWithText("Realtime Quiz Duel")
             .assertIsDisplayed()
 
         composeTestRule
-            .onNodeWithText("Perubahan warna antosianin menjadi merah cerah terjadi pada kondisi pH...")
+            .onNodeWithText("Cari Lawan Duel Online (Matchmaking)")
+            .assertIsDisplayed()
+
+        // 2. Verifikasi komponen Leaderboard muncul
+        composeTestRule
+            .onNodeWithText("Papan Skor Realtime (Leaderboard)")
             .assertIsDisplayed()
     }
 
     @Test
-    fun quizDuelScreen_completesQuiz_andDisplaysFinalScore() {
+    fun quizDuelScreen_clickMatchmaking_showsConnectingState() {
         composeTestRule.setContent {
             QuizDuelScreen(onBackClick = {})
         }
 
-        // Jawab Soal 1
-        composeTestRule.onNodeWithText("Etanol terasamkan").performClick()
+        // Klik tombol Matchmaking
+        composeTestRule
+            .onNodeWithText("Cari Lawan Duel Online (Matchmaking)")
+            .performClick()
 
-        // Jawab Soal 2
-        composeTestRule.onNodeWithText("Asam (pH < 3)").performClick()
+        // Verifikasi transisi ke state pencarian room cloud
+        composeTestRule
+            .onNodeWithText("Menghubungkan ke Cloud Room...")
+            .assertIsDisplayed()
 
-        // Verifikasi tampilan selesai muncul
-        composeTestRule.onNodeWithText("Tantangan Selesai! 🎉").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Kembali ke Beranda").assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText("Batalkan Pencarian")
+            .assertIsDisplayed()
     }
 }

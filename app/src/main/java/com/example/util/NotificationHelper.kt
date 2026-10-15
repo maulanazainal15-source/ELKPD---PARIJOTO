@@ -54,4 +54,12 @@ object NotificationHelper {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NOTIFICATION_ID, builder.build())
     }
+
+    fun showForumNotification(context: Context, author: String, messageSnippet: String) {
+        showStudyReminderNotification(
+            context = context,
+            title = "Diskusi Etnosains: Pesan dari $author",
+            message = messageSnippet
+        )
+    }
 }

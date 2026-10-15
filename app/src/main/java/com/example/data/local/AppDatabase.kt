@@ -33,7 +33,7 @@ import com.example.data.local.entity.UserEntity
         StudentSubmissionEntity::class,
         BibliographyEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

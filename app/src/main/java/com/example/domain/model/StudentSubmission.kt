@@ -12,7 +12,9 @@ data class StudentSubmission(
     val payloadJson: String,
     val score: Float? = null,
     val status: String = "TERKIRIM", // "TERKIRIM", "DIPERIKSA", "LOLOS_KKM"
-    val submittedAt: Long = System.currentTimeMillis()
+    val submittedAt: Long = System.currentTimeMillis(),
+    val schoolName: String = "SMA Negeri 1 Gunung Muria",
+    val deviceInfo: String = ""
 )
 
 enum class SubmissionType(val displayName: String, val badgeColorName: String) {

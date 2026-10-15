@@ -31,7 +31,9 @@ object DatabaseModule {
                 context.applicationContext,
                 AppDatabase::class.java,
                 "parijoto_ethnoscience.db"
-            ).fallbackToDestructiveMigration().build()
+            ).fallbackToDestructiveMigration(true)
+             .fallbackToDestructiveMigrationOnDowngrade(true)
+             .build()
             appDatabaseInstance = instance
             instance
         }

@@ -1,0 +1,159 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isTeacher() {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['TEACHER', 'ADMIN']) ||
+        request.auth.token.email.matches('.*guru.*')
+      );
+    }
+
+    function isValidTimestamp(val) {
+      return val is timestamp && val <= request.time;
+    }
+
+    // Validation: AppPolicyConfig
+    function isValidAppPolicyConfig(data) {
+      return data.schoolName is string && data.schoolName.size() > 0 &&
+             data.adminPinHash is string && data.adminPinHash.size() > 0 &&
+             (!('minimumPassingGradeKkm' in data) || data.minimumPassingGradeKkm is int) &&
+             (!('requireAdminPinForLogin' in data) || data.requireAdminPinForLogin is bool) &&
+             (!('isEvaluationOpen' in data) || data.isEvaluationOpen is bool) &&
+             (!('isAiTutorEnabled' in data) || data.isAiTutorEnabled is bool) &&
+             (!('updatedAt' in data) || isValidTimestamp(data.updatedAt));
+    }
+
+    // Validation: DynamicContentItem
+    function isValidDynamicContentItem(data) {
+      return data.id is string &&
+             data.category in ['GUIDE', 'CURRICULUM', 'LEARNING_MATERIAL', 'CP_TP', 'PBL_ACTIVITY'] &&
+             data.subCategory is string &&
+             data.title is string && data.title.size() > 0 &&
+             data.content is string && data.content.size() > 0 &&
+             (!('orderIndex' in data) || data.orderIndex is int) &&
+             (!('lastUpdated' in data) || isValidTimestamp(data.lastUpdated));
+    }
+
+    // Validation: Bibliography
+    function isValidBibliography(data) {
+      return data.id is string &&
+             data.title is string && data.title.size() > 0 &&
+             data.authors is string && data.authors.size() > 0 &&
+             data.year is string &&
+             data.source is string &&
+             data.category in ['JURNAL', 'BUKU', 'ARTIKEL', 'KURIKULUM', 'REGULASI', 'ETNOSAINS'] &&
+             (!('orderIndex' in data) || data.orderIndex is int) &&
+             (!('updatedAt' in data) || isValidTimestamp(data.updatedAt));
+    }
+
+    // Validation: StudentSubmissionDoc
+    function isValidStudentSubmission(data) {
+      return data.id is string &&
+             data.studentId is string &&
+             data.studentName is string &&
+             data.submissionType in ['ACTIVITY_1', 'ACTIVITY_2', 'EVALUATION_HOTS', 'USABILITY_SURVEY'] &&
+             data.title is string &&
+             data.payloadJson is string &&
+             (!('score' in data) || data.score is number) &&
+             (!('submissionTimestamp' in data) || isValidTimestamp(data.submissionTimestamp));
+    }
+
+    // Validation: QuizDuelDoc
+    function isValidQuizDuel(data) {
+      return data.id is string &&
+             data.player1Id is string &&
+             data.player1Name is string &&
+             data.status in ['WAITING', 'IN_PROGRESS', 'COMPLETED'] &&
+             (!('player1Score' in data) || data.player1Score is int) &&
+             (!('player2Score' in data) || data.player2Score is int) &&
+             (!('currentQuestionIndex' in data) || data.currentQuestionIndex is int) &&
+             (!('createdAt' in data) || isValidTimestamp(data.createdAt)) &&
+             (!('updatedAt' in data) || isValidTimestamp(data.updatedAt));
+    }
+
+    // Validation: ForumPostDoc
+    function isValidForumPost(data) {
+      return data.id is string &&
+             data.authorId is string &&
+             data.authorName is string &&
+             data.title is string && data.title.size() > 0 &&
+             data.content is string && data.content.size() > 0 &&
+             (!('likesCount' in data) || data.likesCount is int) &&
+             (!('commentsCount' in data) || data.commentsCount is int) &&
+             (!('createdAt' in data) || isValidTimestamp(data.createdAt)) &&
+             (!('updatedAt' in data) || isValidTimestamp(data.updatedAt));
+    }
+
+    // Validation: UserProfileDoc
+    function isValidUserProfile(data) {
+      return data.id is string &&
+             data.nama is string && data.nama.size() > 0 &&
+             data.role in ['STUDENT', 'TEACHER', 'ADMIN'] &&
+             (!('mode' in data) || data.mode in ['INDIVIDU', 'KELOMPOK']) &&
+             (!('hotsScore' in data) || data.hotsScore is number) &&
+             (!('updatedAt' in data) || isValidTimestamp(data.updatedAt));
+    }
+
+    // Collection: App Configuration & Policy
+    match /app_config/{configId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isTeacher() || !exists(/databases/$(database)/documents/users/$(request.auth.uid))) && isValidAppPolicyConfig(request.resource.data);
+    }
+
+    // Collection: Dynamic Contents (CMS)
+    match /dynamic_contents/{contentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isTeacher() || !exists(/databases/$(database)/documents/users/$(request.auth.uid))) && isValidDynamicContentItem(request.resource.data);
+    }
+
+    // Collection: Bibliographies
+    match /bibliographies/{bibId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isTeacher() || !exists(/databases/$(database)/documents/users/$(request.auth.uid))) && isValidBibliography(request.resource.data);
+    }
+
+    // Collection: Student Submissions
+    match /student_submissions/{submissionId} {
+      allow read: if isAuthenticated() && (resource.data.studentId == request.auth.uid || isTeacher());
+      allow create: if isAuthenticated() && request.resource.data.studentId == request.auth.uid && isValidStudentSubmission(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.studentId == request.auth.uid || isTeacher()) && isValidStudentSubmission(request.resource.data);
+      allow delete: if isAuthenticated() && isTeacher();
+    }
+
+    // Collection: Quiz Duels
+    match /quiz_duels/{duelId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.player1Id == request.auth.uid && isValidQuizDuel(request.resource.data);
+      allow update: if isAuthenticated() && (
+        resource.data.player1Id == request.auth.uid ||
+        resource.data.player2Id == request.auth.uid ||
+        resource.data.status == 'WAITING'
+      ) && isValidQuizDuel(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.player1Id == request.auth.uid || isTeacher());
+    }
+
+    // Collection: Live Forum Posts
+    match /forum_posts/{postId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid && isValidForumPost(request.resource.data);
+      allow update: if isAuthenticated() && isValidForumPost(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || isTeacher());
+    }
+
+    // Collection: User Profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isTeacher()) && isValidUserProfile(request.resource.data);
+    }
+  }
+}
